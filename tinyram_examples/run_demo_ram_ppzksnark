@@ -1,11 +1,20 @@
 #!/bin/sh
 [ -z $1 ] && echo "Usage: $0 <example-name>" && exit 1
-set -x -e
-./process_assembly $1/$1.s $1/$1-processed_assembly.txt $1/$1-architecture_params.txt
+ set -x -e
+
+if [ ! -f $1/$1-architecture_params.txt ]; then
+  ./process_assembly $1/$1.s $1/$1-processed_assembly.txt $1/$1-architecture_params.txt
+fi
+
+if [ ! -f $1/$1-processed_assembly.txt ]; then
+  input_source="--binary=$1/$1.bin"
+else
+  input_source="--processed_assembly=$1/$1-processed_assembly.txt"
+fi
+
 ../build/libsnark/demo_ram_ppzksnark \
     --architecture_params=$1/$1-architecture_params.txt \
-    --assembly=$1/$1.s \
-    --processed_assembly=$1/$1-processed_assembly.txt \
+    $input_source \
     --computation_bounds=$1/$1-computation_bounds.txt \
     --primary_input=$1/$1-primary_input.txt \
     --auxiliary_input=$1/$1-auxiliary_input.txt

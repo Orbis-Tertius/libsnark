@@ -199,6 +199,8 @@ public:
                         const size_t &arg2idx_or_imm);
 
     size_t as_dword(const tinyram_architecture_params &ap) const;
+
+    static tinyram_instruction from_dword(size_t, const tinyram_architecture_params &ap);
 };
 
 tinyram_instruction random_tinyram_instruction(const tinyram_architecture_params &ap);

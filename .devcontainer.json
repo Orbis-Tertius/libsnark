@@ -1,0 +1,11 @@
+{
+        "name": "libsnark dev",
+        "dockerFile": "Dockerfile",
+        "build": {
+        },
+        "extensions": [
+                "llvm-vs-code-extensions.vscode-clangd"
+        ],
+        "workspaceMount": "source=${localWorkspaceFolder},target=/libsnark,type=bind,consistency=delegated",
+        "workspaceFolder": "/libsnark",
+}

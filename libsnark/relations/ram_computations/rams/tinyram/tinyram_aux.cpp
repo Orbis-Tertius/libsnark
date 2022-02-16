@@ -328,6 +328,27 @@ size_t tinyram_instruction::as_dword(const tinyram_architecture_params &ap) cons
     return result;
 }
 
+tinyram_instruction tinyram_instruction::from_dword(size_t dword, const tinyram_architecture_params &ap) {
+    const size_t shift1 = (2*ap.w - ap.opcode_width() - 1 - 2 * libff::log2(ap.k));
+    const size_t shift2 = libff::log2(ap.k);
+
+    size_t arg2idx_or_imm = dword & ((1 << shift1) - 1);
+    dword = dword >> shift1;
+
+    size_t arg1idx = dword & ((1 << shift2) - 1);
+    dword = dword >> shift2;
+
+    size_t desidx = dword & ((1 << shift2) - 1);
+    dword = dword >> shift2;
+
+    bool arg2_is_imm = dword & 0x01;
+    dword = dword >> 1;
+
+    tinyram_opcode opcode = static_cast<tinyram_opcode>(dword);
+
+    return tinyram_instruction(opcode, arg2_is_imm, desidx, arg1idx, arg2idx_or_imm);
+}
+
 void tinyram_architecture_params::print() const
 {
     printf("* Number of registers (k): %zu\n", k);

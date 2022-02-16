@@ -4,6 +4,7 @@
  *             and contributors (see AUTHORS).
  * @copyright  MIT license (see LICENSE file)
  *****************************************************************************/
+#include "libsnark/relations/ram_computations/rams/tinyram/tinyram_aux.hpp"
 #include <algorithm>
 #include <fstream>
 #include <iostream>
@@ -24,8 +25,8 @@
 namespace po = boost::program_options;
 
 bool process_demo_command_line(const int argc, const char** argv,
-                               std::string &assembly_fn,
                                std::string &processed_assembly_fn,
+                               std::string &binary_fn,
                                std::string &architecture_params_fn,
                                std::string &computation_bounds_fn,
                                std::string &primary_input_fn,
@@ -36,8 +37,8 @@ bool process_demo_command_line(const int argc, const char** argv,
         po::options_description desc("Usage");
         desc.add_options()
             ("help", "print this help message")
-            ("assembly", po::value<std::string>(&assembly_fn)->required())
-            ("processed_assembly", po::value<std::string>(&processed_assembly_fn)->required())
+            ("processed_assembly", po::value<std::string>(&processed_assembly_fn)->default_value(""))
+            ("binary", po::value<std::string>(&binary_fn)->default_value(""))
             ("architecture_params", po::value<std::string>(&architecture_params_fn)->required())
             ("computation_bounds", po::value<std::string>(&computation_bounds_fn)->required())
             ("primary_input", po::value<std::string>(&primary_input_fn)->required())
@@ -66,25 +67,79 @@ bool process_demo_command_line(const int argc, const char** argv,
 
 using namespace libsnark;
 
+void writeProgramToDisk(
+    const tinyram_program& program,
+    const libsnark::tinyram_architecture_params &ap) {
+    std::fstream myfile;
+    myfile = std::fstream("program.bin", std::ios::out | std::ios::binary);
+
+    for (const auto&instruction : program.instructions) {
+        const auto dword = instruction.as_dword(ap);
+        // this writes the instruction in host byte order (little-endian on x86)
+        myfile.write((const char*)&dword, sizeof(dword));
+
+        printf("%16lx\r\n", dword);
+    }
+
+    myfile.close();
+}
+
+tinyram_program readProgramFromDisk(const std::string path, const libsnark::tinyram_architecture_params &ap) {
+    tinyram_program program;
+
+    std::fstream myfile;
+    myfile = std::fstream(path, std::ios::in | std::ios::binary);
+
+    while (!myfile.eof()) {
+        size_t dword = 0;
+        myfile.read((char*)&dword, sizeof(dword));
+        program.add_instruction(tinyram_instruction::from_dword(dword, ap));
+    }
+
+    myfile.close();
+
+    return program;
+}
+
+tinyram_program readProgram(
+    const std::string &processed_assembly_fn,
+    const std::string &binary_fn,
+    ram_ppzksnark_architecture_params<default_tinyram_ppzksnark_pp> ap) {
+    if (!processed_assembly_fn.empty()) {
+        std::ifstream processed(processed_assembly_fn);
+        return load_preprocessed_program(ap, processed);
+    } else if (!binary_fn.empty()) {
+        if (access(binary_fn.c_str(), F_OK) == 0) {
+            std::cout << "Reading from binary file: " << binary_fn << std::endl;
+            return readProgramFromDisk(binary_fn, ap);
+        } else {
+            std::cerr << "Binary file does not exist" << std::endl;
+            abort();
+        }
+    } else {
+        std::cerr << "Either binary or processed assembly parameter should be passed" << std::endl;
+        abort();
+    }
+}
+
 int main(int argc, const char * argv[])
 {
     default_tinyram_ppzksnark_pp::init_public_params();
 #ifdef MINDEPS
     std::string assembly_fn = "assembly.s";
-    std::string processed_assembly_fn = "processed_assembly.txt";
     std::string architecture_params_fn = "architecture_params.txt";
     std::string computation_bounds_fn = "computation_bounds.txt";
     std::string primary_input_fn = "primary_input.txt";
     std::string auxiliary_input_fn = "auxiliary_input.txt";
 #else
-    std::string assembly_fn;
     std::string processed_assembly_fn;
+    std::string binary_fn;
     std::string architecture_params_fn;
     std::string computation_bounds_fn;
     std::string primary_input_fn;
     std::string auxiliary_input_fn;
 
-    if (!process_demo_command_line(argc, argv, assembly_fn, processed_assembly_fn, architecture_params_fn,
+    if (!process_demo_command_line(argc, argv, processed_assembly_fn, binary_fn, architecture_params_fn,
                                    computation_bounds_fn, primary_input_fn, auxiliary_input_fn))
     {
         return 1;
@@ -107,15 +162,10 @@ int main(int argc, const char * argv[])
     size_t tinyram_input_size_bound, tinyram_program_size_bound, time_bound;
     f_rp >> tinyram_input_size_bound >> tinyram_program_size_bound >> time_bound;
 
-    std::ifstream processed(processed_assembly_fn);
-    std::ifstream raw(assembly_fn);
-    tinyram_program program = load_preprocessed_program(ap, processed);
-
-    printf("Program:\n%s\n", std::string((std::istreambuf_iterator<char>(raw)),
-                                         std::istreambuf_iterator<char>()).c_str());
-
     std::ifstream f_primary_input(primary_input_fn);
     std::ifstream f_auxiliary_input(auxiliary_input_fn);
+
+    auto program = readProgram(processed_assembly_fn, binary_fn, ap);
 
     libff::enter_block("Loading primary input");
     tinyram_input_tape primary_input = load_tape(f_primary_input);
